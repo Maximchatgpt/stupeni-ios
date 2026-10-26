@@ -1,0 +1,33 @@
+# Описание Xcode-проекта для XcodeGen: сам .xcodeproj собирается в облаке (GitHub Actions), Mac не нужен.
+name: Stupeni
+options:
+  bundleIdPrefix: space.maxsim
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  Stupeni:
+    type: application
+    platform: iOS
+    sources:
+      - Stupeni
+    info:
+      path: Stupeni/Info.plist
+      properties:
+        CFBundleDisplayName: Ступени
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: space.maxsim.stupeni
+        PRODUCT_NAME: Stupeni
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
