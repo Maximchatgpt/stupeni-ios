@@ -1,0 +1,89 @@
+# Сборка приложения на бесплатном Mac от GitHub. Результат — Stupeni.ipa без подписи:
+# её подписывает SideStore на телефоне вашим Apple ID.
+name: Сборка iOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Выбрать Xcode 26 (нужен для Liquid Glass)
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort | tail -1)
+          if [ -z "$X" ]; then
+            echo "::warning::Xcode 26 не найден — соберу без Liquid Glass (будет обычное размытие)"
+            X=$(ls -d /Applications/Xcode_*.app | sort | tail -1)
+          fi
+          echo "Xcode: $X"
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+
+      - name: Картинки (иконка рисуется скриптом, иконки моделей берутся с сайта)
+        run: |
+          A=Stupeni/Assets.xcassets
+          swift scripts/make_icon.swift "$A/AppIcon.appiconset/icon-1024.png"
+          curl -fsSL https://stupeni.maxsim.space/assets/js/models.js -o models.js
+          python3 - "$A" <<'PY'
+          import base64, re, sys
+          js = open("models.js", encoding="utf-8").read()
+          for v in ["qwen", "openai", "gemini", "claude"]:
+              m = re.search(r'"%s":\s*"data:image/png;base64,([^"]+)"' % v, js)
+              if not m:
+                  sys.exit("нет иконки " + v)
+              open(f"{sys.argv[1]}/model-{v}.imageset/{v}.png", "wb").write(base64.b64decode(m.group(1)))
+          PY
+          ls -l $A/*/*.png
+
+      - name: Установить XcodeGen
+        run: brew install xcodegen
+
+      - name: Создать проект
+        run: xcodegen generate
+
+      - name: Собрать
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Stupeni.xcodeproj \
+            -scheme Stupeni \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tee build.log | grep -E "error:|warning: .*Stupeni/|BUILD (SUCCEEDED|FAILED)" || true
+          test -d build/Build/Products/Release-iphoneos/Stupeni.app
+
+      - name: Упаковать .ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Stupeni.app Payload/
+          zip -qry Stupeni.ipa Payload
+          ls -lh Stupeni.ipa
+
+      - name: Журнал сборки при ошибке
+        if: failure()
+        run: grep -E "error:" -A3 build.log | head -100 || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Stupeni-ipa
+          path: Stupeni.ipa
+
+      - name: Опубликовать как «последнюю сборку»
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest Stupeni.ipa \
+            --title "Ступени — сборка ${{ github.run_number }}" \
+            --notes "Свежая сборка из ветки main. Установка — через SideStore (см. README)."
